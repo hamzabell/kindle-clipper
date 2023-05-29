@@ -1,21 +1,38 @@
 'use client'
 
-import { useState, useCallback, useMemo, ChangeEvent } from 'react'
+import { useState, useCallback, useMemo, ChangeEvent, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import LoadingDots from './loading-dots'
-import { PutBlobResult } from '@vercel/blob'
+import GenerateHTML from '@/app/lib/generate-html'
+import jsPDF from 'jspdf'
+
+// @ts-ignore
+import pdf from 'html-to-pdf-js';
 
 export default function Uploader() {
   const [data, setData] = useState<{
     image: string | null
+    fileName: string | null
   }>({
     image: null,
+    fileName: null
   })
+
+  const [response, setResponse]= useState<{
+    title: string,
+    highlights: string[]
+  }[] | null >(null);
+
+  const [selectedDocument, setSelectedDocument] = useState<{
+    title: string,
+    highlights: string[]
+  } | null>(null);
+
   const [file, setFile] = useState<File | null>(null)
 
   const [dragActive, setDragActive] = useState(false)
 
-  const onChangePicture = useCallback(
+  const onChangeText = useCallback(
     (event: ChangeEvent<HTMLInputElement>) => {
       const file = event.currentTarget.files && event.currentTarget.files[0]
       if (file) {
@@ -25,7 +42,7 @@ export default function Uploader() {
           setFile(file)
           const reader = new FileReader()
           reader.onload = (e) => {
-            setData((prev) => ({ ...prev, image: e.target?.result as string }))
+            setData((prev: any) => ({ ...prev, image: e.target?.result as string, fileName: file.name as string }))
           }
           reader.readAsDataURL(file)
         }
@@ -34,6 +51,35 @@ export default function Uploader() {
     [setData]
   )
 
+  useEffect(() =>  {
+
+    (async () => {
+      if (!selectedDocument) {
+        return;
+      } 
+      const { title, highlights } = selectedDocument; 
+  
+      const html = GenerateHTML(title, highlights);
+
+      var opt = {
+        margin:       1,
+        filename:     `${title}.pdf`,
+        image:        { type: 'jpeg', quality: 1 },
+        html2canvas:  { scale: 1 },
+        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
+        pagebreak: { mode: ['css', 'avoid-all'] }
+
+      };
+
+      await pdf().set(opt).from(html).save()
+      
+    })()
+
+    setSelectedDocument(null);
+
+  }, [selectedDocument])
+
+
   const [saving, setSaving] = useState(false)
 
   const saveDisabled = useMemo(() => {
@@ -41,74 +87,36 @@ export default function Uploader() {
   }, [data.image, saving])
 
   return (
+    <>
     <form
       className="grid gap-6"
       onSubmit={async (e) => {
         e.preventDefault()
         setSaving(true)
-        fetch('/api/upload', {
+        fetch('api/highlights', {
           method: 'POST',
           headers: { 'content-type': file?.type || 'application/octet-stream' },
           body: file,
-        }).then(async (res) => {
-          if (res.status === 200) {
-            const { url } = (await res.json()) as PutBlobResult
-            toast(
-              (t) => (
-                <div className="relative">
-                  <div className="p-2">
-                    <p className="font-semibold text-gray-900">
-                      File uploaded!
-                    </p>
-                    <p className="mt-1 text-sm text-gray-500">
-                      Your file has been uploaded to{' '}
-                      <a
-                        className="font-medium text-gray-900 underline"
-                        href={url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                      >
-                        {url}
-                      </a>
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => toast.dismiss(t.id)}
-                    className="absolute top-0 -right-2 inline-flex text-gray-400 focus:outline-none focus:text-gray-500 rounded-full p-1.5 hover:bg-gray-100 transition ease-in-out duration-150"
-                  >
-                    <svg
-                      className="h-5 w-5"
-                      viewBox="0 0 20 20"
-                      fill="currentColor"
-                    >
-                      <path
-                        fillRule="evenodd"
-                        d="M5.293 5.293a1 1 0 011.414 0L10
-                          8.586l3.293-3.293a1 1 0 111.414 1.414L11.414
-                          10l3.293 3.293a1 1 0 01-1.414 1.414L10
-                          11.414l-3.293 3.293a1 1 0 01-1.414-1.414L8.586
-                          10 5.293 6.707a1 1 0 010-1.414z"
-                        clipRule="evenodd"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              ),
-              { duration: 300000 }
-            )
+        })
+        .then(async res => {
+          if (res.status == 200) {
+            const allHighlights = await res.json();
+  
+            setResponse(allHighlights.data);
+            toast.success("Highlights retreived successfully!")
           } else {
             const error = await res.text()
-            toast.error(error)
+            toast.error(error)   
           }
-          setSaving(false)
+          setSaving(false);
         })
       }}
     >
       <div>
         <div className="space-y-1 mb-4">
-          <h2 className="text-xl font-semibold">Upload a file</h2>
+          <h2 className="text-xl font-semibold mb-0">Upload a file</h2>
           <p className="text-sm text-gray-500">
-            Accepted formats: .png, .jpg, .gif, .mp4
+            Accepted formats: .txt
           </p>
         </div>
         <label
@@ -145,7 +153,7 @@ export default function Uploader() {
                   setFile(file)
                   const reader = new FileReader()
                   reader.onload = (e) => {
-                    setData((prev) => ({
+                    setData((prev: any) => ({
                       ...prev,
                       image: e.target?.result as string,
                     }))
@@ -183,20 +191,14 @@ export default function Uploader() {
               <path d="m16 16-4-4-4 4"></path>
             </svg>
             <p className="mt-2 text-center text-sm text-gray-500">
-              Drag and drop or click to upload.
+              Drag and drop or click to upload your exported kindle clippings
             </p>
-            <p className="mt-2 text-center text-sm text-gray-500">
-              Max file size: 50MB
-            </p>
+
             <span className="sr-only">Photo upload</span>
           </div>
           {data.image && (
             // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={data.image}
-              alt="Preview"
-              className="h-full w-full rounded-md object-cover"
-            />
+            <p className='text-base font-normal'>{data.fileName}</p>
           )}
         </label>
         <div className="mt-1 flex rounded-md shadow-sm">
@@ -204,9 +206,9 @@ export default function Uploader() {
             id="image-upload"
             name="image"
             type="file"
-            accept="image/*"
+            accept="text/plain"
             className="sr-only"
-            onChange={onChangePicture}
+            onChange={onChangeText}
           />
         </div>
       </div>
@@ -226,5 +228,31 @@ export default function Uploader() {
         )}
       </button>
     </form>
+
+    {response && (
+      <>
+        <h5 className='mt-8 mb-2'>All Document(s)</h5>
+        <ul role="list" className="divide-y divide-gray-100">
+
+          {
+            response.map((doc: any, i: any) => (
+              <li className="flex justify-between gap-x-6 py-5" key={i} >
+                <div className="flex gap-x-4">
+                  <div className="w-64 flex-auto">
+                    <p className="text-sm font-semibold leading-6 text-gray-900">{doc.title}</p>
+                    <p className="mt-1 truncate text-xs leading-5 text-gray-500">{doc.highlights.length} Highlights</p>
+
+                  </div>
+                </div>
+                <div className="hidden sm:flex sm:flex-col sm:items-end">
+                <a  className="cursor-pointer rounded-md bg-red-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" onClick={() => setSelectedDocument(doc)}>PDF</a>
+                </div>
+            </li>
+            ))
+          } 
+        </ul>
+      </>
+    )}
+    </>
   )
 }
