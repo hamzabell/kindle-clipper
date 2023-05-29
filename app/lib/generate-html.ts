@@ -1,12 +1,10 @@
 
 
-export default function GenerateHTML(title: string, highlights: string[]): string {
+export default function GenerateHTML(title: string, highlights: string[], markdown: boolean = false): string {
     return `
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8" />
-            <title>${title}</title>
+        <div id="pdf-template">
+            ${ !markdown && (
+            `
             <style>
                 h3 {
                     color: #6c757d;
@@ -29,13 +27,12 @@ export default function GenerateHTML(title: string, highlights: string[]): strin
                 }
 
             </style>
-        </head>
-        <body>
-            <h3 >${title}</h3>
+            `
+            )}
+            <h3>${title}</h3>
             <ol>
             ${highlights.reduce((acc, curr) => acc.concat(`<li>${curr}</li><br />\r\n`), '')}
             </ol>
-        </body>
-        </html>
+        </div>
     `
 }

@@ -4,10 +4,9 @@ import { useState, useCallback, useMemo, ChangeEvent, useEffect } from 'react'
 import toast from 'react-hot-toast'
 import LoadingDots from './loading-dots'
 import GenerateHTML from '@/app/lib/generate-html'
+import TurdownService from 'turndown';
 import jsPDF from 'jspdf'
-
-// @ts-ignore
-import pdf from 'html-to-pdf-js';
+import html2canvas from 'html2canvas'
 
 export default function Uploader() {
   const [data, setData] = useState<{
@@ -28,6 +27,10 @@ export default function Uploader() {
     highlights: string[]
   } | null>(null);
 
+  const [selectedMarkdown, setSelectedMarkdown] = useState<{
+    title: string,
+    highlights: string[]
+  } | null>(null);
   const [file, setFile] = useState<File | null>(null)
 
   const [dragActive, setDragActive] = useState(false)
@@ -61,23 +64,39 @@ export default function Uploader() {
   
       const html = GenerateHTML(title, highlights);
 
-      var opt = {
-        margin:       1,
-        filename:     `${title}.pdf`,
-        image:        { type: 'jpeg', quality: 1 },
-        html2canvas:  { scale: 1 },
-        jsPDF:        { unit: 'in', format: 'letter', orientation: 'portrait' },
-        pagebreak: { mode: ['css', 'avoid-all'] }
+      document.getElementById('template')?.insertAdjacentHTML('beforeend', html);
 
-      };
 
-      await pdf().set(opt).from(html).save()
+      const template = document.querySelector('#pdf-template');
+
       
     })()
 
     setSelectedDocument(null);
 
   }, [selectedDocument])
+
+
+  useEffect(() => {
+    (async () => {
+      if (!selectedMarkdown) {
+        return;
+      }
+      const { title, highlights } = selectedMarkdown; 
+      const html = GenerateHTML(title, highlights, true);
+      const turndownService = new TurdownService()
+
+      const markdown = turndownService.turndown(html);
+
+      const link = document.createElement('a');
+      link.download = `${title}.md`;
+
+      const blob = new Blob([markdown])
+      link.href = URL.createObjectURL(blob)
+      link.click()
+    })()
+
+  }, [selectedMarkdown])
 
 
   const [saving, setSaving] = useState(false)
@@ -229,6 +248,8 @@ export default function Uploader() {
       </button>
     </form>
 
+    <div id="template" className='hidden'></div>
+
     {response && (
       <>
         <h5 className='mt-8 mb-2'>All Document(s)</h5>
@@ -244,8 +265,9 @@ export default function Uploader() {
 
                   </div>
                 </div>
-                <div className="hidden sm:flex sm:flex-col sm:items-end">
-                <a  className="cursor-pointer rounded-md bg-red-500 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" onClick={() => setSelectedDocument(doc)}>PDF</a>
+                <div className="flex gap-x-2">
+                {/* <a  className="cursor-pointer rounded-md bg-red-500 px-4 py-1.5 w-fit h-8 text-sm font-semibold text-white shadow-sm hover:bg-red-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" onClick={() => setSelectedDocument(doc)}>PDF</a> */}
+                <a  className="cursor-pointer rounded-md bg-black px-4 py-1.5 w-fit h-8 text-sm font-semibold text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white" onClick={() => setSelectedMarkdown(doc)}>Markdown</a>
                 </div>
             </li>
             ))
